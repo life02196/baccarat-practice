@@ -1,70 +1,93 @@
-# 假錢百家樂模擬器 + 戒賭工具組
+# 百家樂練習程式
 
-一組**用假錢**練習、記錄、並看清「久賭必輸」的小工具。
-目的：**教育與戒賭**——保留賭博的體驗感，但不碰一毛真錢，並把莊家優勢攤在眼前。
+免費、開源的 Windows 百家樂假錢練習工具。程式使用本機螢幕擷取辨識牌面與官方點數，並依照使用者建立的模擬注單自動結算；不會連線下注，也不會操作娛樂城網站。
 
-> 這裡沒有任何真錢下注、沒有連線賭場、沒有自動下注或賭博策略建議。
-> 全部離線、資料只存在你自己的電腦。
+[下載 Windows 完整版（ZIP）](https://github.com/life02196/baccarat-practice/releases/latest/download/百家樂練習程式_分享版.zip) ｜ [直接下載 EXE](https://github.com/life02196/baccarat-practice/releases/latest/download/百家樂練習程式.exe) ｜ [所有版本](https://github.com/life02196/baccarat-practice/releases)
 
----
+## 主要功能
 
-## 包含什麼
+- 自動擷取目前螢幕，不需要相機或額外錄影設備。
+- 支援 MT、DreamGaming（DG）與 RG 牌桌切換及自動偵測。
+- 以網站官方點數決定莊、閒、和結果，牌面用於確認對子、張數與補牌資訊。
+- 使用多幀證據、牌位記憶及百家樂補牌規則，降低動畫與短暫漏牌造成的未結算。
+- 支援莊、閒、和、莊對、閒對、大小、單雙、超級 6、老虎、龍寶、例牌、熊貓 8、龍 7、超級和等畫面上可選玩法。
+- 假錢餘額、ALL IN、自訂籌碼、重複上一手、多注與近期輸贏紀錄。
+- 下注後立即保留模擬本金，牌局結束後自動派彩並記錄結果。
+- 所有辨識與資料保存都在使用者電腦本機完成。
 
-| 檔案 | 說明 |
-|------|------|
-| `baccarat_sim.py` | 百家樂發牌與賠率引擎（標準補牌規則）。可獨立跑蒙地卡羅自我驗證：`python baccarat_sim.py` |
-| `baccarat_rules.py` | 多注結算引擎：給一手結果，算出 26 種玩法各自輸贏（賠率可設定） |
-| `baccarat_game.py` | 假錢百家樂（程式自己發牌）：選邊、下注、看牌、輸贏，附餘額走勢 |
-| `baccarat_shadow.py` | 假錢「跟牌桌」版：你看牌、手動記錄結果，程式用真賠率算假錢；支援多注、26 玩法、自訂起始金額、標準/免佣、輸光自動開新局 |
-| `ledger.py` | 賭博輸贏記帳 + 連續戒賭天數；把累積虧損換算成生活成本，附真實求助專線 |
-| `live_tracker.py` | 釘最上層的浮動小視窗，快速手動記錄每手輸贏 |
-| `demo.html` / `baccarat_demo.html` | 功能介紹網頁（含旁白字幕） |
-| `make_demo.py` | 由真實程式輸出產生 demo 動圖 |
-| `戒賭協會_成立規劃.md` | 戒賭互助協會的成立規劃草稿 + 台灣真實求助資源 |
-| `打包exe.bat` | 用獨立環境把程式打包成 .exe（不影響系統 Python） |
+> 「完美對」需要可靠的花色辨識，目前未開放自動下注選項。影像辨識仍可能受到網站改版、動畫、遮擋、瀏覽器縮放與顯示比例影響，重要結果請自行核對。
 
----
+## 下載與安裝
 
-## 快速開始
+1. 前往 [最新版本下載頁](https://github.com/life02196/baccarat-practice/releases/latest)。
+2. 建議下載 `百家樂練習程式_分享版.zip`，完整解壓縮後再執行。
+3. 雙擊 `百家樂練習程式.exe`。
+4. 第一次啟動若 Windows SmartScreen 顯示提示，可先確認下載來源為本儲存庫，再選擇「其他資訊」→「仍要執行」。本程式目前沒有商業數位簽章。
 
-需要 Python 3.9+。
+需求：Windows 10／11 64 位元。使用已打包版本不需要安裝 Python。
 
-```bash
-# 驗證賠率引擎（跑 50 萬局，看莊家優勢收斂到約 -1.06%）
-python baccarat_sim.py
+## 使用方式
 
-# 假錢百家樂（自己發牌）
-python baccarat_game.py
+1. 先開啟支援的百家樂牌桌，讓牌面與官方點數保持可見。
+2. 開啟本程式；辨識視窗會顯示目前找到的牌與點數框。
+3. 若自動模式辨識錯網站，按主畫面的「娛樂城」按鈕切換 MT／DreamGaming／RG。
+4. 選擇籌碼金額與模擬玩法，建立本手注單。
+5. 收牌後程式會依官方點數與多幀牌面證據自動結算。
 
-# 假錢跟牌桌版（多注、全玩法）
-python baccarat_shadow.py
+請勿在發牌途中切換牌桌、網站模式或瀏覽器縮放。牌桌若被其他視窗完全遮住，程式無法辨識。
 
-# 記帳 + 戒賭天數
-python ledger.py
+## 隱私與本機資料
+
+程式不包含上傳畫面、遠端分析或遙測功能。執行後可能在 EXE 所在資料夾建立：
+
+- `shadow_data.json`：假錢帳本與程式設定。
+- `screen_card_regions.json`：手動框選的辨識區域。
+- `recognition_debug.log`：不含畫面的文字辨識診斷紀錄。
+
+這些檔案已由 `.gitignore` 排除。分享程式時，請分享 Releases 的原始 ZIP，不要分享自己使用後的資料夾。
+
+## 從原始碼執行
+
+需要 Python 3.9 以上版本：
+
+```powershell
+python -m venv .buildenv
+.\.buildenv\Scripts\python.exe -m pip install -r requirements.txt
+.\.buildenv\Scripts\python.exe baccarat_shadow.py
 ```
 
-打包成 .exe（Windows，給沒裝 Python 的人用）：雙擊 `打包exe.bat`，產物在 `dist/`。
+重新打包 Windows EXE：
 
----
+```powershell
+.\打包exe.bat
+```
 
-## 設計理念：為什麼「假錢」能幫戒賭
+## 測試
 
-- 賭博的刺激來自「下注—開牌—輸贏」這個迴圈，不是金錢本身
-- 用假錢重現這個迴圈，滿足手感，卻不損失真錢
-- 同時用**真實賠率**：玩久了餘額一定往下——你會親眼看到「久賭必輸」
-- `baccarat_sim.py` 的蒙地卡羅可跑數十萬局，數學上證明沒有任何下注法能贏
+```powershell
+python test_rules.py
+python test_sim.py
+python test_card_recognizer.py
+```
 
----
+目前包含結算規則、補牌流程、螢幕辨識、DG 多幀證據、對子與各邊注自動結算等回歸測試。
 
-## 求助資源（台灣）
+## 專案檔案
 
-- 安心專線 **1925**（24 小時免費）
-- 張老師 **1980**
-- 台北市立聯合醫院松德院區 博弈門診
-- 就診紀錄受《個資法》《精神衛生法》保護，雇主與保險公司無權查詢
+| 檔案 | 用途 |
+| --- | --- |
+| `baccarat_shadow.py` | 主程式、假錢帳本與介面 |
+| `screen_card_monitor.py` | 螢幕擷取、多幀辨識與自動結算流程 |
+| `card_recognizer.py` | OpenCV 牌面點數辨識 |
+| `scoreboard_recognizer.py` | MT／DG／RG 官方點數辨識 |
+| `baccarat_rules.py` | 各玩法派彩規則 |
+| `test_card_recognizer.py` | 辨識與整合回歸測試 |
+| `打包exe.bat` | Windows 一鍵打包腳本 |
 
----
+## 使用聲明
+
+本專案只提供假錢模擬、程式研究與個人紀錄，不提供真實下注、自動下注、獲利保證或賭博策略。使用者應遵守所在地法律、娛樂城服務條款及螢幕內容相關權利。本專案與 MT、DreamGaming、RG 或其他娛樂城品牌沒有合作、授權或從屬關係。
 
 ## 授權
 
-MIT
+本專案使用 [MIT License](LICENSE)，可免費使用、修改與散布，但軟體依現況提供，不附帶任何保證。

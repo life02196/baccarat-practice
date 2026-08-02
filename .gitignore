@@ -13,6 +13,7 @@ dist/
 
 # 執行時產生的個人資料檔（不入庫）
 shadow_data.json
+screen_card_regions.json
 sessions.json
 clean_days.json
 hands.json
@@ -20,6 +21,9 @@ hands.json
 # 暫存
 _*.png
 *.log
+diagnostics/
+models/
+image*.png
 
 # 編輯器
 .vscode/
