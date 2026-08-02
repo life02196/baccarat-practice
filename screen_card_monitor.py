@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections import deque
+import ctypes
+from ctypes import wintypes
 from datetime import datetime
 import json
 import os
@@ -21,6 +23,94 @@ PLAYER, BANKER, TIE, GOLD, NEG = "#4aa3ff", "#ff6b6b", "#54c98a", "#e8c268", "#f
 CARD_STABLE_FRAMES = 4
 SCORE_STABLE_FRAMES = 3
 CLEAR_FRAMES = 3
+
+
+def _window_rect(hwnd: int) -> tuple[int, int, int, int] | None:
+    """Return a usable physical-pixel rectangle for a visible Windows window."""
+    if os.name != "nt" or not hwnd:
+        return None
+    user32 = ctypes.windll.user32
+    user32.IsWindow.argtypes = [wintypes.HWND]
+    user32.IsWindow.restype = wintypes.BOOL
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.IsWindowVisible.restype = wintypes.BOOL
+    user32.IsIconic.argtypes = [wintypes.HWND]
+    user32.IsIconic.restype = wintypes.BOOL
+    user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    user32.GetWindowRect.restype = wintypes.BOOL
+    handle = wintypes.HWND(hwnd)
+    if (not user32.IsWindow(handle) or not user32.IsWindowVisible(handle)
+            or user32.IsIconic(handle)):
+        return None
+    rect = wintypes.RECT()
+    # DWM returns physical pixels even when monitors use different DPI scales.
+    try:
+        result = ctypes.windll.dwmapi.DwmGetWindowAttribute(
+            handle, 9, ctypes.byref(rect), ctypes.sizeof(rect))
+    except (AttributeError, OSError):
+        result = -1
+    if result != 0 and not user32.GetWindowRect(handle, ctypes.byref(rect)):
+        return None
+    box = (int(rect.left), int(rect.top), int(rect.right), int(rect.bottom))
+    if box[2] - box[0] < 320 or box[3] - box[1] < 200:
+        return None
+    return box
+
+
+def list_capture_windows(exclude_pid: int | None = None) -> list[tuple[int, str]]:
+    """List visible top-level windows that are large enough to contain a table."""
+    if os.name != "nt":
+        return []
+    user32 = ctypes.windll.user32
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+    user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetClassNameW.restype = ctypes.c_int
+    windows: list[tuple[int, str]] = []
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    @callback_type
+    def visit(hwnd, _lparam):
+        if _window_rect(int(hwnd)) is None:
+            return True
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if exclude_pid is not None and pid.value == exclude_pid:
+            return True
+        class_buffer = ctypes.create_unicode_buffer(256)
+        user32.GetClassNameW(hwnd, class_buffer, len(class_buffer))
+        if class_buffer.value in {"Progman", "WorkerW", "Shell_TrayWnd"}:
+            return True
+        length = user32.GetWindowTextLengthW(hwnd)
+        if length <= 0:
+            return True
+        buffer = ctypes.create_unicode_buffer(length + 1)
+        user32.GetWindowTextW(hwnd, buffer, length + 1)
+        title = " ".join(buffer.value.split())
+        if title:
+            windows.append((int(hwnd), title))
+        return True
+
+    user32.EnumWindows(visit, 0)
+    return sorted(windows, key=lambda item: item[1].casefold())
+
+
+def choose_capture_window(windows: list[tuple[int, str]], saved_title: str):
+    """Resolve a saved title without guessing when several windows are similar."""
+    wanted = " ".join(str(saved_title or "").split())
+    if not wanted:
+        return None
+    for item in windows:
+        if " ".join(item[1].split()) == wanted:
+            return item
+    folded = wanted.casefold()
+    matches = [item for item in windows
+               if " ".join(item[1].split()).casefold() == folded]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _total(cards: list[int]) -> int:
@@ -65,13 +155,24 @@ class ScreenCardMonitor:
     """先框選兩個牌區，再以週期性螢幕截圖模擬錄影串流。"""
 
     def __init__(self, parent: tk.Misc, on_apply, config_path: str,
-                 platform_mode: str = "auto", on_platform=None):
+                 platform_mode: str = "auto", on_platform=None,
+                 capture_window_title: str = "", on_capture_window=None):
         self.parent, self.on_apply, self.config_path = parent, on_apply, config_path
         self.platform_mode = platform_mode if platform_mode in (
             "auto", "original", "dreamgaming", "rg") else "auto"
         self.on_platform = on_platform
+        self.on_capture_window = on_capture_window
         self.detected_platform = None
-        self.screenshot = ImageGrab.grab(all_screens=True).convert("RGB")
+        self.capture_hwnd = None
+        self.capture_window_title = ""
+        self.capture_restore_failed = False
+        saved_window = choose_capture_window(
+            list_capture_windows(exclude_pid=os.getpid()), capture_window_title)
+        if saved_window:
+            self.capture_hwnd, self.capture_window_title = saved_window
+        elif capture_window_title:
+            self.capture_restore_failed = True
+        self.screenshot = self._capture_source(notify=False)
         self.regions: dict[str, tuple[int, int, int, int]] = {}
         self.mode = "player"
         self.drag_start = None
@@ -114,22 +215,27 @@ class ScreenCardMonitor:
         self.window.protocol("WM_DELETE_WINDOW", self.close)
 
         bar = tk.Frame(self.window, bg=PANEL); bar.pack(fill="x")
-        self.player_btn = tk.Button(bar, text="1. 框選閒家牌區", command=lambda: self._set_mode("player"),
+        controls = tk.Frame(bar, bg=PANEL); controls.pack(fill="x")
+        self.player_btn = tk.Button(controls, text="1. 框選閒家牌區", command=lambda: self._set_mode("player"),
                                     bg=PLAYER, fg=BG, relief="flat")
         self.player_btn.pack(side="left", padx=(10, 5), pady=7, ipady=3)
-        self.banker_btn = tk.Button(bar, text="2. 框選莊家牌區", command=lambda: self._set_mode("banker"),
+        self.banker_btn = tk.Button(controls, text="2. 框選莊家牌區", command=lambda: self._set_mode("banker"),
                                     bg=PANEL, fg=BANKER, relief="flat")
         self.banker_btn.pack(side="left", padx=5, pady=7, ipady=3)
-        self.start_btn = tk.Button(bar, text="3. 開始螢幕辨識", command=self.start, state="disabled",
+        self.start_btn = tk.Button(controls, text="3. 開始螢幕辨識", command=self.start, state="disabled",
                                    bg=GOLD, fg=BG, relief="flat")
         self.start_btn.pack(side="left", padx=12, pady=7, ipady=3)
-        tk.Button(bar, text="重新框選", command=self.reset, bg=PANEL, fg=DIM, relief="flat").pack(
+        tk.Button(controls, text="重新框選", command=self.reset, bg=PANEL, fg=DIM, relief="flat").pack(
             side="left", padx=5, pady=7, ipady=3)
-        self.preview_btn = tk.Button(bar, text="隱藏擷取框", command=self._toggle_preview,
+        self.preview_btn = tk.Button(controls, text="隱藏擷取框", command=self._toggle_preview,
                                      bg=PANEL, fg=TIE, relief="flat")
         self.preview_btn.pack(side="left", padx=5, pady=7, ipady=3)
-        self.status = tk.Label(bar, text="在截圖上拖曳框住閒家所有牌會出現的位置", bg=PANEL, fg=GOLD)
-        self.status.pack(side="left", padx=12)
+        self.capture_btn = tk.Button(controls, command=self._show_capture_menu,
+                                     bg=PANEL, fg=GOLD, relief="flat", width=29)
+        self.capture_btn.pack(side="left", padx=5, pady=7, ipady=3)
+        self.status = tk.Label(bar, text="在截圖上拖曳框住閒家所有牌會出現的位置",
+                               bg=PANEL, fg=GOLD, anchor="w")
+        self.status.pack(fill="x", padx=12, pady=(0, 7), anchor="w")
 
         self.canvas = tk.Canvas(self.window, bg="#070b12", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True, padx=10, pady=10)
@@ -149,8 +255,13 @@ class ScreenCardMonitor:
         self.apply_btn.pack(side="right", padx=14, pady=7, ipady=4)
 
         self.window.update_idletasks()
+        self._update_capture_button()
         self._draw_setup_image()
         self._load_regions()
+        if self.capture_restore_failed:
+            self.status.config(text="上次指定的視窗找不到，已改用全部螢幕；可按「擷取視窗」重新指定", fg=NEG)
+            if self.on_capture_window:
+                self.on_capture_window("")
         # 有既有設定便直接監看；第一次使用則自動搜尋整個桌面。
         # Launch in full-screen automatic discovery even when old manual
         # regions exist; manual regions remain available through setup/reset.
@@ -159,6 +270,108 @@ class ScreenCardMonitor:
     def _fit(self, image: Image.Image, max_w: int, max_h: int) -> tuple[Image.Image, float]:
         scale = min(max_w / image.width, max_h / image.height, 1.0)
         return image.resize((round(image.width * scale), round(image.height * scale)), Image.Resampling.LANCZOS), scale
+
+    def _capture_source(self, notify: bool = True) -> Image.Image:
+        """Capture the selected window, or fall back to the complete desktop."""
+        if self.capture_hwnd is not None:
+            rect = _window_rect(self.capture_hwnd)
+            if rect is not None:
+                try:
+                    # Recent Pillow versions can capture a HWND directly. The
+                    # rectangle fallback keeps source installs with older Pillow working.
+                    try:
+                        image = ImageGrab.grab(window=self.capture_hwnd)
+                    except TypeError:
+                        image = ImageGrab.grab(bbox=rect, all_screens=True)
+                    if image.width >= 320 and image.height >= 200:
+                        return image.convert("RGB")
+                except (OSError, ValueError):
+                    pass
+            self._fallback_to_desktop(notify)
+        return ImageGrab.grab(all_screens=True).convert("RGB")
+
+    def _fallback_to_desktop(self, notify: bool = True):
+        old_title = self.capture_window_title
+        self.capture_hwnd = None
+        self.capture_window_title = ""
+        if hasattr(self, "capture_btn"):
+            self._update_capture_button()
+        if notify and old_title:
+            self._reset_detection_for_source()
+            if hasattr(self, "status"):
+                self.status.config(text="指定視窗已關閉或最小化，已改用全部螢幕", fg=NEG)
+            if self.on_capture_window:
+                self.on_capture_window("")
+            self._trace(f"capture window unavailable; falling back from {old_title!r}")
+
+    def _update_capture_button(self):
+        title = self.capture_window_title or "全部螢幕"
+        if len(title) > 24:
+            title = title[:23] + "…"
+        self.capture_btn.config(text=f"擷取視窗：{title} ▼")
+
+    def _show_capture_menu(self):
+        menu = tk.Menu(self.window, tearoff=False, bg=PANEL, fg=FG,
+                       activebackground="#24344b", activeforeground=FG)
+        all_prefix = "✓ " if self.capture_hwnd is None else ""
+        menu.add_command(label=f"{all_prefix}全部螢幕", command=lambda: self._select_capture_window(None, ""))
+        windows = list_capture_windows(exclude_pid=os.getpid())
+        if windows:
+            menu.add_separator()
+            for hwnd, title in windows[:40]:
+                label = title if len(title) <= 66 else title[:65] + "…"
+                if hwnd == self.capture_hwnd:
+                    label = "✓ " + label
+                menu.add_command(label=label,
+                                 command=lambda h=hwnd, t=title: self._select_capture_window(h, t))
+        else:
+            menu.add_command(label="目前沒有可選擇的視窗", state="disabled")
+        self.capture_menu = menu
+        try:
+            menu.tk_popup(self.capture_btn.winfo_rootx(),
+                          self.capture_btn.winfo_rooty() + self.capture_btn.winfo_height())
+        finally:
+            menu.grab_release()
+
+    def _reset_detection_for_source(self):
+        self.histories = {"player": deque(maxlen=10), "banker": deque(maxlen=10)}
+        self.score_history = deque(maxlen=10)
+        self.current_player = []; self.current_banker = []
+        self.last_verified_player = []; self.last_verified_banker = []
+        self.card_candidate_stats = {"player": {}, "banker": {}}
+        self.dg_slot_stats = self._new_dg_slot_stats()
+        self.last_dg_boxes = None; self.last_round_evidence = {}
+        self.frame_sequence = 0; self.official_scores = None
+        self.score_candidate = None; self.score_candidate_since = 0.0
+        self.last_stable_dg_score = None; self.last_stable_dg_seen = 0.0
+        self.round_armed = False; self.empty_frames = 0; self.score_absent_frames = 0
+        self.last_emitted = None; self.last_trace_state = None
+
+    def _select_capture_window(self, hwnd: int | None, title: str):
+        if hwnd is not None and _window_rect(hwnd) is None:
+            self.status.config(text="該視窗目前不可擷取；請先還原視窗後再選擇", fg=NEG)
+            return
+        if self.job:
+            self.window.after_cancel(self.job)
+            self.job = None
+        self.running = False; self.auto_mode = False
+        self.capture_hwnd = hwnd
+        self.capture_window_title = title if hwnd is not None else ""
+        self.screenshot = self._capture_source()
+        self.regions = {}
+        self._reset_detection_for_source()
+        self._update_capture_button()
+        self._draw_setup_image()
+        if self.on_capture_window:
+            self.on_capture_window(self.capture_window_title)
+        source = self.capture_window_title or "全部螢幕"
+        self.status.config(text=f"已切換擷取來源：{source}；正在重新搜尋牌桌", fg=TIE)
+        self._trace(f"capture source changed to {source!r}")
+        self.window.after(100, self.start_auto_discovery)
+
+    def use_full_desktop(self):
+        """Public reset hook used when all application settings are cleared."""
+        self._select_capture_window(None, "")
 
     def _draw_setup_image(self):
         width = max(800, self.canvas.winfo_width() - 4)
@@ -221,7 +434,8 @@ class ScreenCardMonitor:
                 for name, (x0, y0, x1, y1) in self.regions.items()}
         try:
             with open(self.config_path, "w", encoding="utf-8") as handle:
-                json.dump({"regions": data}, handle)
+                json.dump({"regions": data,
+                           "capture_window_title": self.capture_window_title}, handle)
         except OSError:
             pass
 
@@ -230,7 +444,10 @@ class ScreenCardMonitor:
             return
         try:
             with open(self.config_path, encoding="utf-8") as handle:
-                data = json.load(handle)["regions"]
+                saved = json.load(handle)
+            if saved.get("capture_window_title", "") != self.capture_window_title:
+                return
+            data = saved["regions"]
             width, height = self.screenshot.size
             for name in ("player", "banker"):
                 values = data[name]
@@ -254,7 +471,7 @@ class ScreenCardMonitor:
         self.window.geometry("1180x780")
         if not self.canvas.winfo_manager():
             self.canvas.pack(fill="both", expand=True, padx=10, pady=10, before=self.bottom)
-        self.screenshot = ImageGrab.grab(all_screens=True).convert("RGB")
+        self.screenshot = self._capture_source()
         self.regions = {}; self.histories = {"player": deque(maxlen=10), "banker": deque(maxlen=10)}
         self.score_history = deque(maxlen=10); self.official_scores = None
         self.last_verified_player = []; self.last_verified_banker = []
@@ -639,7 +856,7 @@ class ScreenCardMonitor:
     def _tick(self):
         if not self.running or not self.window.winfo_exists():
             return
-        screen = ImageGrab.grab(all_screens=True).convert("RGB")
+        screen = self._capture_source()
         previews = []
         for name in ("player", "banker"):
             crop = screen.crop(self.regions[name])
@@ -671,9 +888,10 @@ class ScreenCardMonitor:
     def _tick_auto(self):
         if not self.running or not self.auto_mode or not self.window.winfo_exists():
             return
-        screen = ImageGrab.grab(all_screens=True).convert("RGB")
+        screen = self._capture_source()
         frame = cv2.cvtColor(np.asarray(screen), cv2.COLOR_RGB2BGR)
-        self._mask_own_window(frame)
+        if self.capture_hwnd is None:
+            self._mask_own_window(frame)
         scoreboard = detect_scoreboard(frame, self.platform_mode)
         if scoreboard and scoreboard.platform != self.detected_platform:
             self.detected_platform = scoreboard.platform

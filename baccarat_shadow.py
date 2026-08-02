@@ -57,7 +57,8 @@ MARKET_COLOR = {k: c for k, _, c in MARKETS}
 
 def default_data():
     return {"settings": {"start_amount": DEFAULT_START, "mode": "standard", "default_bet": 0,
-                         "chip_values": list(DEFAULT_CHIPS), "platform_mode": "auto"},
+                         "chip_values": list(DEFAULT_CHIPS), "platform_mode": "auto",
+                         "capture_window_title": ""},
             "sessions": [{"start": DEFAULT_START, "mode": "standard", "hands": []}]}
 
 
@@ -70,6 +71,7 @@ def load_data():
         assert isinstance(d, dict) and "sessions" in d and "settings" in d
         d["settings"].setdefault("chip_values", list(DEFAULT_CHIPS))
         d["settings"].setdefault("platform_mode", "auto")
+        d["settings"].setdefault("capture_window_title", "")
         d["settings"]["default_bet"] = 0
         if not d["sessions"]:
             d["sessions"] = [{"start": d["settings"]["start_amount"], "mode": d["settings"]["mode"], "hands": []}]
@@ -330,7 +332,10 @@ class Shadow:
             from screen_card_monitor import ScreenCardMonitor
             self.screen_monitor = ScreenCardMonitor(
                 self.root, self._apply_screen_cards, SCREEN_REGIONS,
-                self.platform_var.get(), self._on_platform_detected)
+                platform_mode=self.platform_var.get(),
+                on_platform=self._on_platform_detected,
+                capture_window_title=self.data["settings"].get("capture_window_title", ""),
+                on_capture_window=self._on_capture_window)
         except (ImportError, OSError) as exc:
             self.msg.config(text=f"無法啟動螢幕辨識：{exc}。請安裝 requirements.txt 後重試。", fg=NEG)
             return
@@ -697,6 +702,13 @@ class Shadow:
         self.detected_platform = platform
         self.update_platform_btn()
 
+    def _on_capture_window(self, title):
+        selected = str(title or "")
+        self.data["settings"]["capture_window_title"] = selected
+        save_data(self.data)
+        source = selected or "全部螢幕"
+        self.msg.config(text=f"擷取來源已切換為：{source}", fg=TEAL)
+
     def update_platform_btn(self):
         mode = self.platform_var.get()
         if mode == "auto" and self.detected_platform:
@@ -750,6 +762,7 @@ class Shadow:
         self.update_mode_btn(); self.update_platform_btn()
         if self.screen_monitor is not None:
             self.screen_monitor.set_platform("auto")
+            self.screen_monitor.use_full_desktop()
         self.refresh(msg="全部清除，重新開始。")
 
     def _total_net(self):

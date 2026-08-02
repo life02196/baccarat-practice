@@ -7,7 +7,8 @@ from collections import deque
 
 from card_recognizer import RANK_LABELS, detect_cards, recognize_rank
 from card_recognizer import CardDetection
-from screen_card_monitor import ScreenCardMonitor, is_complete_baccarat_hand
+from screen_card_monitor import (ScreenCardMonitor, choose_capture_window,
+                                 is_complete_baccarat_hand)
 from baccarat_shadow import Shadow, session_turnover
 from scoreboard_recognizer import detect_scoreboard
 import baccarat_rules as rules
@@ -618,6 +619,15 @@ def test_session_turnover_counts_only_valid_settled_bets():
     assert session_turnover(session) == 1700
 
 
+def test_saved_capture_window_requires_an_unambiguous_title():
+    windows = [(101, "DG 百家樂 - Chrome"), (202, "MT 百家樂 - Edge")]
+    assert choose_capture_window(windows, " DG   百家樂 - Chrome ") == windows[0]
+    assert choose_capture_window(windows, "mt 百家樂 - edge") == windows[1]
+    assert choose_capture_window(windows, "不存在的視窗") is None
+    duplicates = [(1, "Casino"), (2, "CASINO")]
+    assert choose_capture_window(duplicates, "casino") is None
+
+
 if __name__ == "__main__":
     failures = 0
     for test in (test_all_ranks, test_multiple_cards_left_to_right, test_automatic_hand_grouping,
@@ -656,7 +666,8 @@ if __name__ == "__main__":
                  test_recorded_dg_rounds_settle_every_visible_market,
                  test_official_scoreboard_examples,
                  test_multimonitor_capture_uses_dpi_not_combined_width,
-                 test_session_turnover_counts_only_valid_settled_bets):
+                 test_session_turnover_counts_only_valid_settled_bets,
+                 test_saved_capture_window_requires_an_unambiguous_title):
         try:
             test(); print(f"[PASS] {test.__name__}")
         except Exception as exc:
