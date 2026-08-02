@@ -1,0 +1,546 @@
+<style>
+  :root {
+    --ink: #0d1117;
+    --panel: #0f1620;
+    --panel-edge: #22303c;
+    --fg: #d7dee6;
+    --dim: #7c8896;
+    --prompt: #56d364;
+    --good: #7ee787;
+    --loss: #ff7b8b;
+    --star: #ffd166;
+    --accent: #3fb950;
+    --accent-soft: #1c6b34;
+    --title: #eaf2ff;
+    --stage-bg: radial-gradient(120% 120% at 50% 0%, #16202b 0%, #0b1017 70%);
+    --page-bg: #0a0e14;
+    --sub-bg: rgba(4, 8, 12, 0.82);
+    --chip-bg: rgba(63, 185, 80, 0.14);
+    --chip-fg: #7ee787;
+    --shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--page-bg);
+    color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px 40px;
+    gap: 20px;
+  }
+
+  .head {
+    text-align: center;
+    max-width: 720px;
+  }
+  .head h1 {
+    margin: 0 0 6px;
+    font-size: clamp(1.4rem, 4vw, 2rem);
+    letter-spacing: 0.5px;
+    color: var(--title);
+    text-wrap: balance;
+  }
+  .head p {
+    margin: 0;
+    color: var(--dim);
+    font-size: 0.95rem;
+  }
+
+  /* 16:9 player */
+  .player {
+    position: relative;
+    width: min(920px, 96vw);
+    aspect-ratio: 16 / 9;
+    background: var(--stage-bg);
+    border: 1px solid var(--panel-edge);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .scene-title {
+    position: absolute;
+    top: 20px;
+    left: 24px;
+    right: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 3;
+  }
+  .chip {
+    font-size: clamp(0.7rem, 1.6vw, 0.85rem);
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--chip-fg);
+    background: var(--chip-bg);
+    border: 1px solid rgba(63, 185, 80, 0.3);
+    padding: 5px 12px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .scene-title h2 {
+    margin: 0;
+    font-size: clamp(1rem, 2.6vw, 1.5rem);
+    color: var(--title);
+    font-weight: 600;
+    text-wrap: balance;
+  }
+
+  /* terminal */
+  .term {
+    position: absolute;
+    top: 68px;
+    left: 24px;
+    right: 24px;
+    bottom: 96px;
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 10px;
+    padding: 16px 18px;
+    overflow: hidden;
+    font-family: "Consolas", "Cascadia Mono", ui-monospace, monospace;
+    font-size: clamp(0.72rem, 1.9vw, 1.02rem);
+    line-height: 1.5;
+  }
+  .term .row { white-space: pre-wrap; word-break: break-word; }
+  .term .prompt { color: var(--prompt); }
+  .term .out { color: var(--fg); }
+  .term .good { color: var(--good); }
+  .term .loss { color: var(--loss); font-weight: 600; }
+  .term .star { color: var(--star); font-weight: 700; }
+  .term .dim { color: var(--dim); }
+  .caret {
+    display: inline-block;
+    width: 9px;
+    height: 1.05em;
+    background: var(--accent);
+    vertical-align: text-bottom;
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* subtitle */
+  .subtitle {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 16px 24px 20px;
+    background: linear-gradient(to top, var(--sub-bg), rgba(4,8,12,0));
+    z-index: 4;
+    min-height: 84px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .subtitle span {
+    font-size: clamp(0.95rem, 2.5vw, 1.35rem);
+    font-weight: 600;
+    text-align: center;
+    text-wrap: balance;
+    color: #f4f8ff;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+    max-width: 90%;
+  }
+
+  /* start overlay */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    background: rgba(6, 10, 15, 0.78);
+    backdrop-filter: blur(3px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    cursor: pointer;
+    transition: opacity 0.3s;
+  }
+  .overlay.hide { opacity: 0; pointer-events: none; }
+  .play-btn {
+    width: clamp(72px, 14vw, 104px);
+    height: clamp(72px, 14vw, 104px);
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    box-shadow: 0 10px 30px rgba(63,185,80,0.4);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .play-btn:hover { transform: scale(1.06); box-shadow: 0 14px 40px rgba(63,185,80,0.55); }
+  .play-btn:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+  .play-btn::before {
+    content: "";
+    width: 0; height: 0;
+    border-left: clamp(24px,5vw,34px) solid #06210f;
+    border-top: clamp(15px,3vw,21px) solid transparent;
+    border-bottom: clamp(15px,3vw,21px) solid transparent;
+    margin-left: 8px;
+  }
+  .overlay p { margin: 0; color: #cdd7e2; font-size: 1rem; letter-spacing: 0.5px; }
+
+  /* controls */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .btn {
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--fg);
+    background: #17202b;
+    border: 1px solid var(--panel-edge);
+    border-radius: 8px;
+    padding: 9px 16px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--good); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dots { display: flex; gap: 8px; }
+  .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #2a3642; transition: background 0.2s, transform 0.2s;
+  }
+  .dot.active { background: var(--accent); transform: scale(1.3); }
+  .dot.done { background: var(--accent-soft); }
+  .muted-note { color: var(--dim); font-size: 0.82rem; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .caret { animation: none; }
+    .play-btn { transition: none; }
+  }
+</style>
+
+<div class="head">
+  <h1>戒賭帳本 — 功能介紹</h1>
+  <p>一個只做記錄、不下注的小工具。看清楚數字，是戒賭的第一步。</p>
+</div>
+
+<div class="player" id="player">
+  <div class="scene-title">
+    <span class="chip" id="chip">介紹</span>
+    <h2 id="sceneTitle"></h2>
+  </div>
+  <div class="term" id="term"></div>
+  <div class="subtitle"><span id="sub"></span></div>
+
+  <div class="overlay" id="overlay" role="button" tabindex="0" aria-label="播放影片">
+    <button class="play-btn" id="playBtn" aria-label="播放"></button>
+    <p>點一下播放（有中文旁白 + 字幕）</p>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="btn" id="replayBtn">重播</button>
+  <button class="btn" id="muteBtn">旁白：開</button>
+  <div class="dots" id="dots"></div>
+</div>
+<div class="muted-note" id="note">若沒有聲音，字幕會照常播放。</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // 每一幕：功能字卡 + 終端機內容（真實輸出）+ 字幕/旁白
+  var SCENES = [
+    {
+      chip: "介紹",
+      title: "這是什麼",
+      lines: [
+        { k: "dim", t: "戒賭帳本  ledger.py" },
+        { k: "out", t: "" },
+        { k: "out", t: "只做一件事：" },
+        { k: "good", t: "把賭博的輸贏誠實記下來。" },
+        { k: "out", t: "" },
+        { k: "dim", t: "不擷取畫面，不給下注建議。" },
+        { k: "dim", t: "資料只在你自己的電腦裡。" }
+      ],
+      sub: "這是戒賭帳本。它只做一件事：把你賭博的輸贏，誠實記下來。"
+    },
+    {
+      chip: "功能一",
+      title: "記錄每一場",
+      lines: [
+        { k: "prompt", t: "$ python ledger.py add" },
+        { k: "out", t: "" },
+        { k: "dim", t: "--- 記一場 ---" },
+        { k: "out", t: "日期: 2026-07-30" },
+        { k: "out", t: "帶多少錢進去: 8000" },
+        { k: "out", t: "帶多少錢出來: 0" },
+        { k: "loss", t: "[記錄完成] 這場輸了 8,000。" },
+        { k: "loss", t: "[累積至今] 淨 -15,000（共 4 場）" }
+      ],
+      sub: "每賭一場就記一筆：帶多少進去、帶多少出來。它幫你算這場輸贏。"
+    },
+    {
+      chip: "功能二",
+      title: "戒賭天數",
+      lines: [
+        { k: "prompt", t: "$ python ledger.py clean" },
+        { k: "out", t: "" },
+        { k: "good", t: "[記錄完成] 今天忍住了，沒賭。" },
+        { k: "out", t: "" },
+        { k: "star", t: "  ★ 連續戒賭 1 天 ★" },
+        { k: "out", t: "  這一天，你沒有讓任何錢流進莊家口袋。" }
+      ],
+      sub: "忍住沒賭的那天也記下來。連續戒賭的天數，會一天一天往上長。"
+    },
+    {
+      chip: "功能三",
+      title: "勝率與當前輸贏",
+      lines: [
+        { k: "prompt", t: "$ python ledger.py stats" },
+        { k: "dim", t: "========== 你的賭博總帳 ==========" },
+        { k: "star", t: "★ 連續戒賭     : 1 天" },
+        { k: "out", t: "總場數         : 4" },
+        { k: "out", t: "贏的場數       : 1" },
+        { k: "out", t: "勝率           : 25.0%" },
+        { k: "out", t: "總共投入       : 22,000" },
+        { k: "loss", t: "當前輸贏       : -15,000" }
+      ],
+      sub: "打開統計：勝率、當前輸贏一目了然。四場只贏一場，勝率二十五趴，總共輸了一萬五。"
+    },
+    {
+      chip: "功能四",
+      title: "把錢換算成生活",
+      lines: [
+        { k: "dim", t: "--- 這些錢原本可以 ---" },
+        { k: "out", t: "到現在你淨輸了 15,000。" },
+        { k: "good", t: "  = 50 頓 300 元的飯" },
+        { k: "good", t: "  = 38 本書" },
+        { k: "good", t: "  = 1 個月房租" },
+        { k: "out", t: "" },
+        { k: "out", t: "數字不會騙人。長期玩下去，這條線只會往下。" }
+      ],
+      sub: "它把虧損換算成生活：五十頓飯、三十八本書、一個月房租。數字不會騙人。"
+    },
+    {
+      chip: "功能五",
+      title: "需要時，帶你求助",
+      lines: [
+        { k: "out", t: "想找人談（免費、保密）：" },
+        { k: "good", t: "  安心專線 1925" },
+        { k: "good", t: "  張老師 1980" },
+        { k: "out", t: "  台北市立聯合醫院 博弈門診" },
+        { k: "dim", t: "  (雇主與保險公司查不到)" }
+      ],
+      sub: "需要幫忙時，它給你真實的求助專線：安心專線一九二五，免費又保密。"
+    },
+    {
+      chip: "結語",
+      title: "看見，就是開始",
+      lines: [
+        { k: "good", t: "看見數字，是戒賭的第一步。" },
+        { k: "out", t: "" },
+        { k: "dim", t: "少賭一場，就是賺一場。" }
+      ],
+      sub: "看見數字，就是戒賭的第一步。少賭一場，就是賺一場。"
+    }
+  ];
+
+  var termEl = document.getElementById("term");
+  var chipEl = document.getElementById("chip");
+  var titleEl = document.getElementById("sceneTitle");
+  var subEl = document.getElementById("sub");
+  var overlay = document.getElementById("overlay");
+  var playBtn = document.getElementById("playBtn");
+  var replayBtn = document.getElementById("replayBtn");
+  var muteBtn = document.getElementById("muteBtn");
+  var dotsEl = document.getElementById("dots");
+
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var muted = false;
+  var current = -1;
+  var advanceTimer = null;
+  var typeTimer = null;
+  var advanced = false;
+
+  // dots
+  SCENES.forEach(function (_, i) {
+    var d = document.createElement("div");
+    d.className = "dot";
+    dotsEl.appendChild(d);
+  });
+  var dots = Array.prototype.slice.call(dotsEl.children);
+
+  function setDots() {
+    dots.forEach(function (d, i) {
+      d.className = "dot" + (i === current ? " active" : (i < current ? " done" : ""));
+    });
+  }
+
+  function pickVoice() {
+    var vs = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+    var zh = vs.filter(function (v) { return /zh|Chinese|Hanhan|Han/i.test(v.lang + " " + v.name); });
+    // 偏好台灣國語
+    var tw = zh.filter(function (v) { return /zh[-_]?TW|Hanhan|Taiwan/i.test(v.lang + " " + v.name); });
+    return tw[0] || zh[0] || null;
+  }
+
+  function speak(text, onend) {
+    if (muted || !window.speechSynthesis) { onend(); return; }
+    try {
+      speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      var v = pickVoice();
+      if (v) u.voice = v;
+      u.lang = (v && v.lang) || "zh-TW";
+      u.rate = 0.98;
+      u.pitch = 1.0;
+      var done = false;
+      u.onend = function () { if (!done) { done = true; onend(); } };
+      u.onerror = function () { if (!done) { done = true; onend(); } };
+      speechSynthesis.speak(u);
+      // 保險：某些瀏覽器 onend 不觸發
+      setTimeout(function () { if (!done) { done = true; onend(); } }, estMs(text) + 1500);
+    } catch (e) { onend(); }
+  }
+
+  function estMs(text) {
+    // 中文約每字 230ms，最少 2.6 秒
+    return Math.max(2600, text.length * 230);
+  }
+
+  function typeLines(lines, done) {
+    termEl.innerHTML = "";
+    var i = 0;
+    function nextLine() {
+      if (i >= lines.length) {
+        var caret = document.createElement("span");
+        caret.className = "caret";
+        termEl.appendChild(caret);
+        done();
+        return;
+      }
+      var ln = lines[i];
+      var row = document.createElement("div");
+      row.className = "row " + ln.k;
+      termEl.appendChild(row);
+      if (reduce || ln.t.length === 0) {
+        row.textContent = ln.t;
+        i++;
+        typeTimer = setTimeout(nextLine, reduce ? 0 : 90);
+        return;
+      }
+      var c = 0;
+      function typeChar() {
+        row.textContent = ln.t.slice(0, c);
+        c++;
+        if (c <= ln.t.length) {
+          typeTimer = setTimeout(typeChar, 18);
+        } else {
+          i++;
+          typeTimer = setTimeout(nextLine, 110);
+        }
+      }
+      typeChar();
+    }
+    nextLine();
+  }
+
+  function clearTimers() {
+    if (advanceTimer) { clearTimeout(advanceTimer); advanceTimer = null; }
+    if (typeTimer) { clearTimeout(typeTimer); typeTimer = null; }
+  }
+
+  function playScene(idx) {
+    clearTimers();
+    if (window.speechSynthesis) speechSynthesis.cancel();
+    current = idx;
+    advanced = false;
+    setDots();
+    var sc = SCENES[idx];
+    chipEl.textContent = sc.chip;
+    titleEl.textContent = sc.title;
+    subEl.textContent = sc.sub;
+
+    var narrationDone = false;
+    var typingDone = false;
+    var minTime = false;
+
+    function maybeAdvance() {
+      // 旁白結束 + 打字完成 + 最短停留，才換下一幕
+      if (narrationDone && typingDone && minTime && !advanced) {
+        advanced = true;
+        if (idx + 1 < SCENES.length) {
+          advanceTimer = setTimeout(function () { playScene(idx + 1); }, 650);
+        } else {
+          finish();
+        }
+      }
+    }
+
+    // 最短停留：即使很快也讓人看得到
+    setTimeout(function () { minTime = true; maybeAdvance(); }, 1600);
+
+    typeLines(sc.lines, function () { typingDone = true; maybeAdvance(); });
+
+    speak(sc.sub, function () { narrationDone = true; maybeAdvance(); });
+  }
+
+  function finish() {
+    setDots();
+    dots.forEach(function (d) { d.className = "dot done"; });
+    overlay.classList.remove("hide");
+    overlay.querySelector("p").textContent = "看完了。點一下重播。";
+  }
+
+  function start() {
+    overlay.classList.add("hide");
+    // 觸發語音引擎（有些瀏覽器要先有一次 user gesture）
+    if (window.speechSynthesis) { try { speechSynthesis.resume(); } catch (e) {} }
+    playScene(0);
+  }
+
+  function replay() {
+    clearTimers();
+    if (window.speechSynthesis) speechSynthesis.cancel();
+    overlay.classList.add("hide");
+    playScene(0);
+  }
+
+  overlay.addEventListener("click", start);
+  overlay.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); start(); }
+  });
+  playBtn.addEventListener("click", function (e) { e.stopPropagation(); start(); });
+  replayBtn.addEventListener("click", replay);
+  muteBtn.addEventListener("click", function () {
+    muted = !muted;
+    muteBtn.textContent = muted ? "旁白：關" : "旁白：開";
+    if (muted && window.speechSynthesis) speechSynthesis.cancel();
+  });
+
+  // 預載語音清單
+  if (window.speechSynthesis) {
+    speechSynthesis.getVoices();
+    speechSynthesis.onvoiceschanged = function () { speechSynthesis.getVoices(); };
+  } else {
+    document.getElementById("note").textContent = "這個瀏覽器沒有語音功能，字幕會照常播放。";
+    muteBtn.disabled = true;
+  }
+
+  // 初始畫面顯示第一幕靜態內容
+  chipEl.textContent = SCENES[0].chip;
+  titleEl.textContent = SCENES[0].title;
+  subEl.textContent = "點播放，開始看。";
+})();
+</script>

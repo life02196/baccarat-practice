@@ -1,0 +1,323 @@
+<style>
+  :root{
+    --bg:#0a1018; --felt1:#0d3b2e; --felt2:#0a2b22; --edge:#274156;
+    --fg:#e9eff6; --dim:#8fa0b3; --gold:#e8c268;
+    --player:#4aa3ff; --banker:#ff6b6b; --tie:#54c98a;
+    --card:#f5f2e9; --card-ink:#1a1a1a; --card-red:#c0392b;
+    --pos:#3fb950; --neg:#ff5c6c; --sub-bg:rgba(3,7,11,.82);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:16px;padding:20px 14px 36px;}
+  .head{text-align:center;max-width:640px;}
+  .head h1{margin:0 0 4px;font-size:clamp(1.3rem,3.6vw,1.8rem);color:var(--gold);
+    letter-spacing:.5px;text-wrap:balance;}
+  .head p{margin:0;color:var(--dim);font-size:.9rem;}
+
+  .player-box{position:relative;width:min(880px,96vw);aspect-ratio:16/10;
+    border-radius:18px;overflow:hidden;border:1px solid var(--edge);
+    background:radial-gradient(120% 120% at 50% 15%,var(--felt1),var(--felt2) 70%,#07130f);
+    box-shadow:0 26px 64px rgba(0,0,0,.6),inset 0 0 120px rgba(0,0,0,.4);}
+
+  /* top HUD */
+  .hud{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;
+    align-items:flex-start;padding:14px 20px;z-index:3;}
+  .hud .bal{display:flex;flex-direction:column;}
+  .hud .bal .k{font-size:.7rem;color:var(--dim);letter-spacing:1px;}
+  .hud .bal .v{font-family:"Consolas",monospace;font-size:clamp(1.4rem,4vw,2.1rem);
+    font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums;}
+  .hud .net{text-align:right;}
+  .hud .net .k{font-size:.7rem;color:var(--dim);letter-spacing:1px;}
+  .hud .net .v{font-family:"Consolas",monospace;font-size:clamp(1.1rem,3vw,1.6rem);
+    font-weight:800;font-variant-numeric:tabular-nums;}
+
+  /* hands */
+  .felt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    gap:clamp(20px,6vw,64px);padding-top:24px;}
+  .seat{display:flex;flex-direction:column;align-items:center;gap:10px;min-width:120px;}
+  .seat .label{font-size:clamp(.85rem,2.2vw,1.1rem);font-weight:800;letter-spacing:1px;}
+  .seat.player .label{color:var(--player);}
+  .seat.banker .label{color:var(--banker);}
+  .cards{display:flex;gap:8px;min-height:clamp(70px,14vw,104px);}
+  .card{width:clamp(48px,9vw,70px);height:clamp(70px,14vw,104px);border-radius:8px;
+    background:var(--card);color:var(--card-ink);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;font-family:"Consolas",monospace;
+    font-weight:800;font-size:clamp(1.1rem,3vw,1.7rem);
+    box-shadow:0 6px 16px rgba(0,0,0,.45);
+    transform:translateY(-14px) rotateY(90deg);opacity:0;
+    transition:transform .32s ease,opacity .32s ease;}
+  .card.show{transform:none;opacity:1;}
+  .card.red{color:var(--card-red);}
+  .card .suit{font-size:.72em;line-height:1;margin-top:2px;}
+  .seat .total{font-family:"Consolas",monospace;font-weight:800;
+    font-size:clamp(1rem,2.6vw,1.35rem);color:var(--fg);
+    background:rgba(0,0,0,.3);padding:3px 12px;border-radius:999px;min-width:64px;text-align:center;}
+
+  /* result banner */
+  .result{position:absolute;top:46%;left:50%;transform:translate(-50%,-50%) scale(.7);
+    z-index:4;font-size:clamp(1.3rem,4.5vw,2.4rem);font-weight:900;letter-spacing:1px;
+    padding:8px 22px;border-radius:14px;background:rgba(4,8,12,.78);
+    opacity:0;transition:opacity .25s,transform .25s;white-space:nowrap;}
+  .result.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
+
+  /* bet options row */
+  .bets{position:absolute;left:0;right:0;bottom:96px;display:flex;justify-content:center;
+    gap:10px;z-index:3;}
+  .bet{font-size:clamp(.8rem,2.2vw,1.05rem);font-weight:800;letter-spacing:1px;
+    padding:8px 16px;border-radius:10px;border:2px solid transparent;color:var(--fg);
+    background:rgba(0,0,0,.35);opacity:.5;transition:.2s;}
+  .bet.player{color:var(--player);}
+  .bet.tie{color:var(--tie);}
+  .bet.banker{color:var(--banker);}
+  .bet.active{opacity:1;transform:translateY(-3px);}
+  .bet.player.active{border-color:var(--player);box-shadow:0 0 20px rgba(74,163,255,.45);}
+  .bet.tie.active{border-color:var(--tie);box-shadow:0 0 20px rgba(84,201,138,.45);}
+  .bet.banker.active{border-color:var(--banker);box-shadow:0 0 20px rgba(255,107,107,.45);}
+  .bet .amt{display:block;font-size:.7em;color:var(--dim);font-weight:600;margin-top:2px;}
+
+  /* subtitle */
+  .subtitle{position:absolute;left:0;right:0;bottom:0;z-index:5;min-height:82px;
+    padding:14px 22px 18px;display:flex;align-items:flex-end;justify-content:center;
+    background:linear-gradient(to top,var(--sub-bg),rgba(3,7,11,0));}
+  .subtitle span{font-size:clamp(.92rem,2.4vw,1.3rem);font-weight:700;text-align:center;
+    text-wrap:balance;color:#f4f8ff;text-shadow:0 2px 8px rgba(0,0,0,.85);max-width:92%;}
+
+  /* chip label top-left */
+  .scene-chip{position:absolute;top:60px;left:20px;z-index:4;font-size:.72rem;
+    font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#0b1220;
+    background:var(--gold);padding:4px 11px;border-radius:999px;opacity:.95;}
+
+  /* overlay */
+  .overlay{position:absolute;inset:0;z-index:10;background:rgba(5,9,14,.8);
+    backdrop-filter:blur(3px);display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:16px;cursor:pointer;transition:opacity .3s;}
+  .overlay.hide{opacity:0;pointer-events:none;}
+  .play{width:clamp(72px,13vw,100px);height:clamp(72px,13vw,100px);border-radius:50%;
+    background:var(--gold);border:none;display:grid;place-items:center;cursor:pointer;
+    box-shadow:0 12px 34px rgba(232,194,104,.45);transition:transform .15s;}
+  .play:hover{transform:scale(1.06);}
+  .play:focus-visible{outline:3px solid #fff;outline-offset:4px;}
+  .play::before{content:"";width:0;height:0;margin-left:8px;
+    border-left:clamp(24px,5vw,32px) solid #231c05;
+    border-top:clamp(15px,3vw,20px) solid transparent;
+    border-bottom:clamp(15px,3vw,20px) solid transparent;}
+  .overlay p{margin:0;color:#d7e0ea;font-size:1rem;}
+
+  .controls{display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:center;}
+  .btn{font:inherit;font-size:.9rem;font-weight:700;color:var(--fg);background:#15202d;
+    border:1px solid var(--edge);border-radius:8px;padding:9px 16px;cursor:pointer;}
+  .btn:hover{border-color:var(--gold);color:var(--gold);}
+  .btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+  .note{color:var(--dim);font-size:.82rem;text-align:center;max-width:560px;}
+
+  @media (prefers-reduced-motion:reduce){
+    .card{transition:none;transform:none;opacity:1;}
+    .result{transition:none;}
+  }
+</style>
+
+<div class="head">
+  <h1>假錢百家樂 — Demo</h1>
+  <p>發牌、下注選項、當前輸贏，全是真規則、真賠率。只是錢是假的。</p>
+</div>
+
+<div class="player-box" id="stage">
+  <div class="hud">
+    <div class="bal"><span class="k">假錢餘額</span><span class="v" id="bal">10,000</span></div>
+    <div class="net"><span class="k">當前輸贏</span><span class="v" id="net" style="color:var(--dim)">0</span></div>
+  </div>
+
+  <div class="scene-chip" id="chip">DEMO</div>
+
+  <div class="felt">
+    <div class="seat player">
+      <div class="label">閒 PLAYER</div>
+      <div class="cards" id="pcards"></div>
+      <div class="total" id="ptotal">-</div>
+    </div>
+    <div class="seat banker">
+      <div class="label">莊 BANKER</div>
+      <div class="cards" id="bcards"></div>
+      <div class="total" id="btotal">-</div>
+    </div>
+  </div>
+
+  <div class="result" id="result"></div>
+
+  <div class="bets">
+    <div class="bet player" id="bet-player">押 閒<span class="amt" id="amt-player"></span></div>
+    <div class="bet tie" id="bet-tie">押 和<span class="amt" id="amt-tie"></span></div>
+    <div class="bet banker" id="bet-banker">押 莊<span class="amt" id="amt-banker"></span></div>
+  </div>
+
+  <div class="subtitle"><span id="sub">點播放，看它怎麼運作</span></div>
+
+  <div class="overlay" id="overlay" role="button" tabindex="0" aria-label="播放">
+    <button class="play" id="playBtn" aria-label="播放"></button>
+    <p>點一下播放（有中文旁白 + 字幕）</p>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="btn" id="replay">重播</button>
+  <button class="btn" id="mute">旁白：開</button>
+</div>
+<div class="note" id="foot">真正的程式是 baccarat_game.py，這支影片照它的功能演。玩久了那條餘額只會往下——那就是重點。</div>
+
+<script>
+(function(){
+  "use strict";
+  // 真實引擎產生的牌局（seed 4），每張牌 rank：A=1,J=11,Q=12,K=13
+  var HANDS = [
+    {bet:"banker",amt:500, p:[4,5],      b:[2,12],     pt:9,bt:2,win:"player",chg:-500, bal:9500},
+    {bet:"player",amt:500, p:[7,8,2],    b:[3,2],      pt:7,bt:5,win:"player",chg:500,  bal:10000},
+    {bet:"banker",amt:1000,p:[1,7],      b:[9,5],      pt:8,bt:4,win:"player",chg:-1000,bal:9000},
+    {bet:"banker",amt:800, p:[13,13,9],  b:[1,4],      pt:9,bt:5,win:"player",chg:-800, bal:8200},
+    {bet:"tie",   amt:300, p:[9,6,3],    b:[5,13],     pt:8,bt:5,win:"player",chg:-300, bal:7900},
+    {bet:"player",amt:1000,p:[2,5],      b:[4,1,11],   pt:7,bt:5,win:"player",chg:1000, bal:8900},
+    {bet:"banker",amt:1500,p:[13,5,4],   b:[13,5,3],   pt:9,bt:8,win:"player",chg:-1500,bal:7400}
+  ];
+  var SUITS=["♠","♥","♦","♣"]; // 黑桃 紅心 方塊 梅花
+  var RED={1:0}; // placeholder
+  function rankLabel(r){return ({1:"A",11:"J",12:"Q",13:"K"})[r]||String(r);}
+
+  var $=function(id){return document.getElementById(id);};
+  var stage=$("stage"), overlay=$("overlay"), playBtn=$("playBtn");
+  var balEl=$("bal"), netEl=$("net"), chipEl=$("chip");
+  var pcards=$("pcards"), bcards=$("bcards"), ptotal=$("ptotal"), btotal=$("btotal");
+  var resultEl=$("result"), subEl=$("sub");
+  var betEls={player:$("bet-player"),tie:$("bet-tie"),banker:$("bet-banker")};
+  var amtEls={player:$("amt-player"),tie:$("amt-tie"),banker:$("amt-banker")};
+  var reduce=window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var muted=false, token=0;
+
+  var SIDE_ZH={player:"閒",banker:"莊",tie:"和"};
+
+  function sleep(ms,t){return new Promise(function(res){
+    var id=setTimeout(function(){ if(t===token) res(); }, ms);
+  });}
+
+  function speak(text){
+    return new Promise(function(res){
+      if(muted||!window.speechSynthesis){res();return;}
+      try{
+        speechSynthesis.cancel();
+        var u=new SpeechSynthesisUtterance(text);
+        var vs=speechSynthesis.getVoices();
+        var zh=vs.filter(function(v){return /zh|Han|Chinese/i.test(v.lang+v.name);});
+        var tw=zh.filter(function(v){return /TW|Han|Taiwan/i.test(v.lang+v.name);});
+        if(tw[0]||zh[0]) u.voice=tw[0]||zh[0];
+        u.lang=(u.voice&&u.voice.lang)||"zh-TW"; u.rate=1.0;
+        var done=false, fin=function(){if(!done){done=true;res();}};
+        u.onend=fin; u.onerror=fin;
+        speechSynthesis.speak(u);
+        setTimeout(fin, Math.max(2200,text.length*220)+1200);
+      }catch(e){res();}
+    });
+  }
+
+  function setSub(t){subEl.textContent=t;}
+  function fmt(n){return (n<0?"-":"")+Math.abs(n).toLocaleString();}
+
+  function clearTable(){
+    pcards.innerHTML=""; bcards.innerHTML="";
+    ptotal.textContent="-"; btotal.textContent="-";
+    resultEl.className="result"; resultEl.textContent="";
+    for(var k in betEls){betEls[k].className="bet "+k; amtEls[k].textContent="";}
+  }
+
+  function makeCard(rank,suitIdx){
+    var d=document.createElement("div");
+    var red=(suitIdx===1||suitIdx===2);
+    d.className="card"+(red?" red":"");
+    d.innerHTML=rankLabel(rank)+'<span class="suit">'+SUITS[suitIdx]+'</span>';
+    return d;
+  }
+
+  function dealCardTo(container,rank){
+    return new Promise(function(res){
+      var si=Math.floor(Math.random()*4);
+      var c=makeCard(rank,si);
+      container.appendChild(c);
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){ c.classList.add("show"); }); });
+      setTimeout(res, reduce?60:340);
+    });
+  }
+
+  async function playHand(h,idx,t){
+    if(t!==token) return;
+    clearTable();
+    chipEl.textContent="第 "+(idx+1)+" 手 / 共 "+HANDS.length;
+
+    // 1) 下注選項亮起
+    betEls[h.bet].classList.add("active");
+    amtEls[h.bet].textContent=fmt(h.amt);
+    if(idx===0) setSub("先選一邊下注：閒、和，或莊。這手押「"+SIDE_ZH[h.bet]+"」"+fmt(h.amt)+"。");
+    else if(idx===1) setSub("這手改押「"+SIDE_ZH[h.bet]+"」。下注金額隨你調。");
+    else setSub("押「"+SIDE_ZH[h.bet]+"」"+fmt(h.amt)+"。");
+    await speak(subEl.textContent); if(t!==token) return;
+    await sleep(reduce?100:350,t); if(t!==token) return;
+
+    // 2) 發牌（閒、莊輪流）
+    if(idx<=1) setSub("按發牌，兩邊照真規則補牌。");
+    var maxc=Math.max(h.p.length,h.b.length);
+    for(var i=0;i<maxc;i++){
+      if(i<h.p.length){ await dealCardTo(pcards,h.p[i]); if(t!==token)return; }
+      if(i<h.b.length){ await dealCardTo(bcards,h.b[i]); if(t!==token)return; }
+    }
+    ptotal.textContent=h.pt+" 點";
+    btotal.textContent=h.bt+" 點";
+    if(idx<=1){ await speak("閒 "+h.pt+"點，莊 "+h.bt+"點。"); if(t!==token)return; }
+    await sleep(reduce?100:400,t); if(t!==token) return;
+
+    // 3) 結果 + 當前輸贏更新
+    var winzh=SIDE_ZH[h.win]+" 贏"; if(h.win==="tie") winzh="和 局";
+    resultEl.textContent=winzh;
+    resultEl.style.color = h.win==="player"?"var(--player)":h.win==="banker"?"var(--banker)":"var(--tie)";
+    resultEl.classList.add("show");
+
+    balEl.textContent=fmt(h.bal);
+    var net=h.bal-10000;
+    netEl.textContent=(net>=0?"+":"")+fmt(net);
+    netEl.style.color = net>=0? "var(--pos)":"var(--neg)";
+    balEl.style.color = h.bal>=10000? "var(--gold)":"var(--neg)";
+
+    var youtxt = h.chg>0? ("你贏 +"+fmt(h.chg)) : h.chg<0? ("你輸 "+fmt(h.chg)) : "退還本金";
+    setSub(winzh+"，"+youtxt+"（假錢）。當前輸贏 "+(net>=0?"+":"")+fmt(net)+"。");
+    await speak(subEl.textContent); if(t!==token) return;
+    await sleep(reduce?150:700,t);
+  }
+
+  async function run(){
+    var t=++token;
+    balEl.textContent="10,000"; balEl.style.color="var(--gold)";
+    netEl.textContent="0"; netEl.style.color="var(--dim)";
+    for(var i=0;i<HANDS.length;i++){
+      await playHand(HANDS[i],i,t);
+      if(t!==token) return;
+    }
+    // 結語
+    chipEl.textContent="結語";
+    setSub("七手下來，10,000 剩 7,400。真錢也是這樣沒的——只是這裡輸的是假的。");
+    await speak(subEl.textContent); if(t!==token) return;
+    overlay.classList.remove("hide");
+    overlay.querySelector("p").textContent="看完了。點一下重播。";
+  }
+
+  function start(){
+    overlay.classList.add("hide");
+    if(window.speechSynthesis){try{speechSynthesis.resume();}catch(e){}}
+    run();
+  }
+  overlay.addEventListener("click",start);
+  overlay.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();start();}});
+  playBtn.addEventListener("click",function(e){e.stopPropagation();start();});
+  $("replay").addEventListener("click",function(){ if(window.speechSynthesis)speechSynthesis.cancel(); overlay.classList.add("hide"); run(); });
+  $("mute").addEventListener("click",function(){ muted=!muted; this.textContent=muted?"旁白：關":"旁白：開"; if(muted&&window.speechSynthesis)speechSynthesis.cancel(); });
+
+  if(window.speechSynthesis){ speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged=function(){speechSynthesis.getVoices();}; }
+  else { $("foot").textContent="這個瀏覽器沒有語音，字幕會照常播放。"; $("mute").disabled=true; }
+})();
+</script>

@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 打包環境與產物（可由 打包exe.bat 重新產生）
+.buildenv/
+.venv/
+venv/
+build/
+dist/
+*.spec
+
+# 執行時產生的個人資料檔（不入庫）
+shadow_data.json
+sessions.json
+clean_days.json
+hands.json
+
+# 暫存
+_*.png
+*.log
+
+# 編輯器
+.vscode/
+.idea/
