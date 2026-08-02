@@ -90,6 +90,25 @@ def session_balance(sess):
     return sess["start"] + sum(h["change"] for h in sess["hands"])
 
 
+def session_turnover(sess):
+    """Return the total settled stake for one session.
+
+    Older data files may contain hands without a ``bets`` field, so malformed
+    or missing bet entries are ignored instead of preventing the app from
+    starting.
+    """
+    total = 0
+    for hand in sess.get("hands", []):
+        for bet in hand.get("bets", []):
+            try:
+                amount = int(bet[1])
+            except (IndexError, TypeError, ValueError):
+                continue
+            if amount > 0:
+                total += amount
+    return total
+
+
 class Shadow:
     def __init__(self, root):
         self.root = root
@@ -159,6 +178,7 @@ class Shadow:
         self.hands_lbl = self._stat(stat, "手數", 0)
         self.rate_lbl = self._stat(stat, "勝率", 1)
         self.net_lbl = self._stat(stat, "本局淨", 2)
+        self.turnover_lbl = self._stat(stat, "Session 流水", 3)
         self.life_lbl = tk.Label(hero, text="", bg=PANEL, fg=DIM, font=self.f_xs)
         self.life_lbl.grid(row=2, column=0, columnspan=2, pady=(0, 10))
 
@@ -746,6 +766,7 @@ class Shadow:
         self.bal_lbl.config(text=f"{bal:,}", fg=balance_color)
         self.hands_lbl.config(text=str(hands)); self.rate_lbl.config(text=f"{rate:.0f}%")
         self.net_lbl.config(text=f"{net:+,}", fg=POS if net >= 0 else NEG)
+        self.turnover_lbl.config(text=f"{session_turnover(sess):,}")
         total_hands = sum(len(s["hands"]) for s in self.data["sessions"])
         tn = self._total_net(); sess_no = len(self.data["sessions"])
         money = f"總共輸了 {abs(tn):,}" if tn < 0 else (f"總共贏了 {tn:,}" if tn > 0 else "總共打平")

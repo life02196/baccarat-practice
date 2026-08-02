@@ -8,7 +8,7 @@ from collections import deque
 from card_recognizer import RANK_LABELS, detect_cards, recognize_rank
 from card_recognizer import CardDetection
 from screen_card_monitor import ScreenCardMonitor, is_complete_baccarat_hand
-from baccarat_shadow import Shadow
+from baccarat_shadow import Shadow, session_turnover
 from scoreboard_recognizer import detect_scoreboard
 import baccarat_rules as rules
 import baccarat_shadow as shadow_module
@@ -606,6 +606,18 @@ def test_multimonitor_capture_uses_dpi_not_combined_width():
     assert ScreenCardMonitor._capture_coordinate_scale(2880, 1620, 1920, 1080) == 1.5
 
 
+def test_session_turnover_counts_only_valid_settled_bets():
+    session = {
+        "hands": [
+            {"bets": [["banker", 1000], ["bpair", 200]], "change": 800},
+            {"bets": [["player", "500"]], "change": -500},
+            {"change": 0},  # 舊版紀錄可能沒有 bets
+            {"bets": [["tie"], None, ["banker", -100]], "change": 0},
+        ]
+    }
+    assert session_turnover(session) == 1700
+
+
 if __name__ == "__main__":
     failures = 0
     for test in (test_all_ranks, test_multiple_cards_left_to_right, test_automatic_hand_grouping,
@@ -643,7 +655,8 @@ if __name__ == "__main__":
                  test_all_visible_auto_markets_settle_together_with_full_evidence,
                  test_recorded_dg_rounds_settle_every_visible_market,
                  test_official_scoreboard_examples,
-                 test_multimonitor_capture_uses_dpi_not_combined_width):
+                 test_multimonitor_capture_uses_dpi_not_combined_width,
+                 test_session_turnover_counts_only_valid_settled_bets):
         try:
             test(); print(f"[PASS] {test.__name__}")
         except Exception as exc:
