@@ -1,0 +1,8 @@
+# 核心引擎（baccarat_sim.py / baccarat_rules.py）：只用 Python 標準庫，免安裝。
+# GUI（baccarat_game / baccarat_shadow / ledger / live_tracker）：用內建 tkinter（標準庫）。
+#
+# 以下只有特定用途才需要：
+Pillow>=9.0          # make_demo.py 產生 demo 動圖時需要
+#
+# 開發／打包（非執行必需）：
+# pyinstaller>=6.0   # 打包 .exe，見 打包exe.bat（會自動裝在獨立的 .buildenv）
