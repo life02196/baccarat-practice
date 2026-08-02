@@ -4,10 +4,12 @@ import cv2
 import numpy as np
 import os
 from collections import deque
+from PIL import Image
 
 from card_recognizer import RANK_LABELS, detect_cards, recognize_rank
 from card_recognizer import CardDetection
-from screen_card_monitor import (ScreenCardMonitor, choose_capture_window,
+from screen_card_monitor import (ScreenCardMonitor, _capture_is_black,
+                                 choose_capture_window,
                                  is_complete_baccarat_hand)
 from baccarat_shadow import Shadow, session_turnover
 from scoreboard_recognizer import detect_scoreboard
@@ -628,6 +630,14 @@ def test_saved_capture_window_requires_an_unambiguous_title():
     assert choose_capture_window(duplicates, "casino") is None
 
 
+def test_capture_black_frame_detection_keeps_dark_interfaces_valid():
+    assert _capture_is_black(Image.fromarray(np.zeros((300, 500, 3), np.uint8))) is True
+    dark_ui = np.zeros((300, 500, 3), np.uint8)
+    dark_ui[20:40, 20:300] = (30, 30, 30)
+    dark_ui[100:180, 100:400] = (15, 70, 20)
+    assert _capture_is_black(Image.fromarray(dark_ui)) is False
+
+
 if __name__ == "__main__":
     failures = 0
     for test in (test_all_ranks, test_multiple_cards_left_to_right, test_automatic_hand_grouping,
@@ -667,7 +677,8 @@ if __name__ == "__main__":
                  test_official_scoreboard_examples,
                  test_multimonitor_capture_uses_dpi_not_combined_width,
                  test_session_turnover_counts_only_valid_settled_bets,
-                 test_saved_capture_window_requires_an_unambiguous_title):
+                 test_saved_capture_window_requires_an_unambiguous_title,
+                 test_capture_black_frame_detection_keeps_dark_interfaces_valid):
         try:
             test(); print(f"[PASS] {test.__name__}")
         except Exception as exc:

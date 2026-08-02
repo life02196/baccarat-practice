@@ -113,6 +113,15 @@ def choose_capture_window(windows: list[tuple[int, str]], saved_title: str):
     return matches[0] if len(matches) == 1 else None
 
 
+def _capture_is_black(image: Image.Image) -> bool:
+    """Detect the all-black frames returned by HWND capture for accelerated browsers."""
+    array = np.asarray(image.convert("RGB"))
+    y_step = max(1, array.shape[0] // 80)
+    x_step = max(1, array.shape[1] // 80)
+    sample = array[::y_step, ::x_step]
+    return bool(np.mean(np.max(sample, axis=2) < 8) >= 0.995)
+
+
 def _total(cards: list[int]) -> int:
     return sum(rank if rank <= 9 else 0 for rank in cards) % 10
 
@@ -166,6 +175,8 @@ class ScreenCardMonitor:
         self.capture_hwnd = None
         self.capture_window_title = ""
         self.capture_restore_failed = False
+        self.capture_box = None
+        self.capture_black = False
         saved_window = choose_capture_window(
             list_capture_windows(exclude_pid=os.getpid()), capture_window_title)
         if saved_window:
@@ -277,23 +288,38 @@ class ScreenCardMonitor:
             rect = _window_rect(self.capture_hwnd)
             if rect is not None:
                 try:
-                    # Recent Pillow versions can capture a HWND directly. The
-                    # rectangle fallback keeps source installs with older Pillow working.
-                    try:
-                        image = ImageGrab.grab(window=self.capture_hwnd)
-                    except TypeError:
-                        image = ImageGrab.grab(bbox=rect, all_screens=True)
+                    # Chrome/Edge with hardware acceleration commonly returns
+                    # a completely black image through HWND capture. Capture
+                    # the visible desktop pixels at the tracked window bounds
+                    # first; this also works across monitors and mixed origins.
+                    image = ImageGrab.grab(bbox=rect, all_screens=True).convert("RGB")
+                    is_black = _capture_is_black(image)
+                    if is_black:
+                        try:
+                            direct = ImageGrab.grab(window=self.capture_hwnd).convert("RGB")
+                            if not _capture_is_black(direct):
+                                image = direct
+                                is_black = False
+                        except (TypeError, OSError, ValueError):
+                            pass
                     if image.width >= 320 and image.height >= 200:
-                        return image.convert("RGB")
+                        self.capture_box = rect
+                        self.capture_black = is_black
+                        return image
                 except (OSError, ValueError):
                     pass
             self._fallback_to_desktop(notify)
-        return ImageGrab.grab(all_screens=True).convert("RGB")
+        self.capture_box = None
+        image = ImageGrab.grab(all_screens=True).convert("RGB")
+        self.capture_black = _capture_is_black(image)
+        return image
 
     def _fallback_to_desktop(self, notify: bool = True):
         old_title = self.capture_window_title
         self.capture_hwnd = None
         self.capture_window_title = ""
+        self.capture_box = None
+        self.capture_black = False
         if hasattr(self, "capture_btn"):
             self._update_capture_button()
         if notify and old_title:
@@ -533,14 +559,23 @@ class ScreenCardMonitor:
         """不讓即時預覽中的牌與分數被下一次螢幕擷取重複辨識。"""
         try:
             self.window.update_idletasks()
-            screen_w = max(1, self.window.winfo_screenwidth())
-            screen_h = max(1, self.window.winfo_screenheight())
-            scale = self._capture_coordinate_scale(frame.shape[1], frame.shape[0],
-                                                   screen_w, screen_h)
-            x0 = max(0, round(self.window.winfo_rootx() * scale))
-            y0 = max(0, round(self.window.winfo_rooty() * scale))
-            x1 = min(frame.shape[1], round((self.window.winfo_rootx() + self.window.winfo_width()) * scale))
-            y1 = min(frame.shape[0], round((self.window.winfo_rooty() + self.window.winfo_height()) * scale))
+            if self.capture_box is not None:
+                scale = 1.0
+                origin_x, origin_y = self.capture_box[:2]
+            else:
+                screen_w = max(1, self.window.winfo_screenwidth())
+                screen_h = max(1, self.window.winfo_screenheight())
+                scale = self._capture_coordinate_scale(frame.shape[1], frame.shape[0],
+                                                       screen_w, screen_h)
+                if os.name == "nt":
+                    origin_x = round(ctypes.windll.user32.GetSystemMetrics(76) * scale)
+                    origin_y = round(ctypes.windll.user32.GetSystemMetrics(77) * scale)
+                else:
+                    origin_x = origin_y = 0
+            x0 = max(0, round(self.window.winfo_rootx() * scale) - origin_x)
+            y0 = max(0, round(self.window.winfo_rooty() * scale) - origin_y)
+            x1 = min(frame.shape[1], round((self.window.winfo_rootx() + self.window.winfo_width()) * scale) - origin_x)
+            y1 = min(frame.shape[0], round((self.window.winfo_rooty() + self.window.winfo_height()) * scale) - origin_y)
             if x1 > x0 and y1 > y0:
                 frame[y0:y1, x0:x1] = (8, 12, 18)
         except tk.TclError:
@@ -890,8 +925,7 @@ class ScreenCardMonitor:
             return
         screen = self._capture_source()
         frame = cv2.cvtColor(np.asarray(screen), cv2.COLOR_RGB2BGR)
-        if self.capture_hwnd is None:
-            self._mask_own_window(frame)
+        self._mask_own_window(frame)
         scoreboard = detect_scoreboard(frame, self.platform_mode)
         if scoreboard and scoreboard.platform != self.detected_platform:
             self.detected_platform = scoreboard.platform
@@ -993,8 +1027,11 @@ class ScreenCardMonitor:
         self._render_auto_preview(frame, all_cards, cards, scoreboard)
         self._render_result()
         self._auto_emit_if_ready()
-        if not player or not banker:
-            self.status.config(text=f"全螢幕搜尋中：目前找到 {len(cards)} 張牌；需要兩組各 2～3 張", fg=GOLD)
+        if self.capture_black and self.capture_hwnd is not None:
+            self.status.config(text="指定視窗目前是黑畫面；請確認視窗沒有最小化，並讓牌桌保持可見", fg=NEG)
+        elif not player or not banker:
+            scope = "指定視窗" if self.capture_hwnd is not None else "全螢幕"
+            self.status.config(text=f"{scope}搜尋中：目前找到 {len(cards)} 張牌；需要兩組各 2～3 張", fg=GOLD)
         else:
             progress = min(self._consecutive_count(self.histories["player"]),
                            self._consecutive_count(self.histories["banker"]), CARD_STABLE_FRAMES)
