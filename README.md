@@ -2,7 +2,7 @@
 
 免費、開源的 Windows 百家樂假錢練習工具。程式使用本機螢幕擷取辨識牌面與官方點數，並依照使用者建立的模擬注單自動結算；不會連線下注，也不會操作娛樂城網站。
 
-[下載 Windows 完整版（ZIP）](https://github.com/life02196/baccarat-practice/releases/latest/download/百家樂練習程式_分享版.zip) ｜ [直接下載 EXE](https://github.com/life02196/baccarat-practice/releases/latest/download/百家樂練習程式.exe) ｜ [所有版本](https://github.com/life02196/baccarat-practice/releases)
+[下載 Windows 完整版（ZIP）](https://github.com/life02196/baccarat-practice/releases/latest/download/BaccaratPractice-Windows.zip) ｜ [直接下載 EXE](https://github.com/life02196/baccarat-practice/releases/latest/download/BaccaratPractice-Windows.exe) ｜ [所有版本](https://github.com/life02196/baccarat-practice/releases)
 
 ## 主要功能
 
@@ -20,7 +20,7 @@
 ## 下載與安裝
 
 1. 前往 [最新版本下載頁](https://github.com/life02196/baccarat-practice/releases/latest)。
-2. 建議下載 `百家樂練習程式_分享版.zip`，完整解壓縮後再執行。
+2. 建議下載 `BaccaratPractice-Windows.zip`，完整解壓縮後再執行。
 3. 雙擊 `百家樂練習程式.exe`。
 4. 第一次啟動若 Windows SmartScreen 顯示提示，可先確認下載來源為本儲存庫，再選擇「其他資訊」→「仍要執行」。本程式目前沒有商業數位簽章。
 
